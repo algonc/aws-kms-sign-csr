@@ -29,7 +29,7 @@ linters:
       - path: _test\.go
         linters:
           - gosec
-      - path: main\.go
+      - path: pem\.go
         linters:
           - gosec
         text: "G304:"
