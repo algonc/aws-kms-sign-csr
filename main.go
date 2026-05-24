@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -12,8 +13,17 @@ import (
 )
 
 func main() {
-	cfg := loadConfig()
-	ctx := context.Background()
+	if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	cfg, err := parseConfig(args, stderr)
+	if err != nil {
+		return err
+	}
 
 	var opts []func(*awsconfig.LoadOptions) error
 	if cfg.region != "" {
@@ -25,32 +35,33 @@ func main() {
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		fatalf("loading AWS config: %v", err)
+		return fmt.Errorf("loading AWS config: %w", err)
 	}
 
 	kmsClient := kms.NewFromConfig(awsCfg)
+	return signCSR(ctx, cfg, kmsClient, stdout)
+}
 
+func signCSR(ctx context.Context, cfg config, kmsClient kmsClientAPI, stdout io.Writer) error {
 	csrDER, err := readCSRDER(cfg.csrFile)
 	if err != nil {
-		fatalf("reading CSR: %v", err)
+		return fmt.Errorf("reading CSR: %w", err)
 	}
 
 	kmsPubKeyDER, err := fetchKMSPublicKeyDER(ctx, kmsClient, cfg.keyID)
 	if err != nil {
-		fatalf("fetching KMS public key: %v", err)
+		return fmt.Errorf("fetching KMS public key: %w", err)
 	}
 
 	entry := algorithms[cfg.algorithm]
 
 	signedDER, err := buildSignedCSR(ctx, kmsClient, csrDER, kmsPubKeyDER, entry, cfg.keyID)
 	if err != nil {
-		fatalf("building signed CSR: %v", err)
+		return fmt.Errorf("building signed CSR: %w", err)
 	}
 
-	outputPEM(signedDER)
-}
-
-func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
-	os.Exit(1)
+	if err := writeCSRPEM(stdout, signedDER); err != nil {
+		return fmt.Errorf("writing PEM output: %w", err)
+	}
+	return nil
 }

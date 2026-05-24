@@ -21,7 +21,7 @@ jobs:
     name: Validate Go
     runs-on: ubuntu-latest
     env:
-      MIN_COVERAGE: "48.0"
+      MIN_COVERAGE: "80.0"
 
     steps:
       - name: Checkout

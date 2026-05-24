@@ -1,3 +1,5 @@
+// Copyright 2026 Andre Goncalves. All rights reserved.
+
 package main
 
 import (
@@ -5,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/asn1"
 	"hash"
+	"sort"
 
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
@@ -67,4 +70,13 @@ var algorithms = map[string]algorithmEntry{
 		keyFamily:    keyFamilyRSA,
 		nullParams:   true,
 	},
+}
+
+func supportedAlgorithmNames() []string {
+	names := make([]string, 0, len(algorithms))
+	for name := range algorithms {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
