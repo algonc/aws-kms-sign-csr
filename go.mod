@@ -1,6 +1,6 @@
 module github.com/algonc/aws-kms-sign-csr
 
-go 1.25.3
+go 1.25.10
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.1
