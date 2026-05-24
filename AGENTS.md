@@ -6,9 +6,15 @@ This repository contains `aws-kms-sign-csr`, a Go CLI that rewrites a PEM CSR to
 
 The code is currently a small single-package Go module:
 
-- `main.go` contains CLI parsing, CSR/ASN.1 handling, KMS calls, and PEM output.
+- `main.go` contains the entrypoint and top-level orchestration.
+- `cli.go` contains flag parsing and CLI config validation.
+- `algorithm.go` contains supported signing algorithms and key-family metadata.
+- `csr.go` contains CSR/ASN.1 parsing, rewriting, and signature assembly.
+- `kms.go` contains the narrow KMS client interface and public-key fetch helper.
+- `pem.go` contains CSR PEM input and output helpers.
+- `main_test.go` contains regression tests for CSR behavior, algorithm metadata, and KMS interactions.
 - `Makefile` builds the binary and provides an end-to-end CSR generation/signing workflow.
-- `README.md` documents supported algorithms, usage, and validation steps.
+- `README.md` links to user-facing documentation under `docs/`.
 
 ## Development Commands
 
