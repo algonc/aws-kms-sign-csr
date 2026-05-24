@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 )
 
@@ -15,32 +15,30 @@ type config struct {
 	profile   string
 }
 
-func loadConfig() config {
-	csrFile := flag.String("csr", "", "Path to PEM-encoded CSR file (required)")
-	keyID := flag.String("key-id", "", "AWS KMS key ID, ARN, or alias (required)")
-	algorithm := flag.String("algorithm", "ecdsa-sha256", "Signing algorithm: ecdsa-sha256|ecdsa-sha384|ecdsa-sha512|rsa-sha256|rsa-sha384|rsa-sha512")
-	region := flag.String("region", "", "AWS region (default: from environment)")
-	profile := flag.String("profile", "", "AWS credentials profile (default: from environment)")
+func parseConfig(args []string, stderr io.Writer) (config, error) {
+	flags := flag.NewFlagSet("aws-kms-sign-csr", flag.ContinueOnError)
+	flags.SetOutput(stderr)
 
-	flag.Parse()
+	csrFile := flags.String("csr", "", "Path to PEM-encoded CSR file (required)")
+	keyID := flags.String("key-id", "", "AWS KMS key ID, ARN, or alias (required)")
+	algorithm := flags.String("algorithm", "ecdsa-sha256", "Signing algorithm: ecdsa-sha256|ecdsa-sha384|ecdsa-sha512|rsa-sha256|rsa-sha384|rsa-sha512")
+	region := flags.String("region", "", "AWS region (default: from environment)")
+	profile := flags.String("profile", "", "AWS credentials profile (default: from environment)")
+
+	if err := flags.Parse(args); err != nil {
+		return config{}, err
+	}
 
 	if *csrFile == "" {
-		fmt.Fprintln(os.Stderr, "error: --csr is required")
-		flag.Usage()
-		os.Exit(1)
+		flags.Usage()
+		return config{}, fmt.Errorf("--csr is required")
 	}
 	if *keyID == "" {
-		fmt.Fprintln(os.Stderr, "error: --key-id is required")
-		flag.Usage()
-		os.Exit(1)
+		flags.Usage()
+		return config{}, fmt.Errorf("--key-id is required")
 	}
 	if _, ok := algorithms[*algorithm]; !ok {
-		var valid []string
-		for k := range algorithms {
-			valid = append(valid, k)
-		}
-		fmt.Fprintf(os.Stderr, "error: unknown algorithm %q; valid choices: %s\n", *algorithm, strings.Join(valid, ", "))
-		os.Exit(1)
+		return config{}, fmt.Errorf("unknown algorithm %q; valid choices: %s", *algorithm, strings.Join(supportedAlgorithmNames(), ", "))
 	}
 
 	return config{
@@ -49,5 +47,5 @@ func loadConfig() config {
 		algorithm: *algorithm,
 		region:    *region,
 		profile:   *profile,
-	}
+	}, nil
 }

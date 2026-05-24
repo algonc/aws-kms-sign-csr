@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -21,8 +22,6 @@ func readCSRDER(path string) ([]byte, error) {
 	return block.Bytes, nil
 }
 
-func outputPEM(der []byte) {
-	if err := pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}); err != nil {
-		fatalf("writing PEM output: %v", err)
-	}
+func writeCSRPEM(w io.Writer, der []byte) error {
+	return pem.Encode(w, &pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der})
 }

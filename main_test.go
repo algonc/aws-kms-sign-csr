@@ -16,6 +16,7 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -40,6 +41,14 @@ type fakeKMSClient struct {
 	message    []byte
 	messageTyp kmstypes.MessageType
 	algorithm  kmstypes.SigningAlgorithmSpec
+}
+
+type errorWriter struct {
+	err error
+}
+
+func (w errorWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }
 
 func (f *fakeKMSClient) GetPublicKey(_ context.Context, input *kms.GetPublicKeyInput, _ ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
@@ -74,6 +83,104 @@ func (f *fakeKMSClient) Sign(_ context.Context, input *kms.SignInput, _ ...func(
 		return nil, err
 	}
 	return &kms.SignOutput{Signature: signature}, nil
+}
+
+func TestParseConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		want       config
+		wantErr    string
+		wantStderr string
+	}{
+		{
+			name: "required flags",
+			args: []string{"-csr", "input.csr", "-key-id", "alias/test"},
+			want: config{
+				csrFile:   "input.csr",
+				keyID:     "alias/test",
+				algorithm: "ecdsa-sha256",
+			},
+		},
+		{
+			name: "all flags",
+			args: []string{
+				"-csr", "input.csr",
+				"-key-id", "arn:aws:kms:eu-central-1:123456789012:key/example",
+				"-algorithm", "rsa-sha512",
+				"-region", "eu-central-1",
+				"-profile", "prod",
+			},
+			want: config{
+				csrFile:   "input.csr",
+				keyID:     "arn:aws:kms:eu-central-1:123456789012:key/example",
+				algorithm: "rsa-sha512",
+				region:    "eu-central-1",
+				profile:   "prod",
+			},
+		},
+		{
+			name:       "missing CSR",
+			args:       []string{"-key-id", "alias/test"},
+			wantErr:    "--csr is required",
+			wantStderr: "Usage of aws-kms-sign-csr",
+		},
+		{
+			name:       "missing key ID",
+			args:       []string{"-csr", "input.csr"},
+			wantErr:    "--key-id is required",
+			wantStderr: "Usage of aws-kms-sign-csr",
+		},
+		{
+			name:    "unknown algorithm",
+			args:    []string{"-csr", "input.csr", "-key-id", "alias/test", "-algorithm", "ed25519"},
+			wantErr: `unknown algorithm "ed25519"; valid choices: ecdsa-sha256, ecdsa-sha384, ecdsa-sha512, rsa-sha256, rsa-sha384, rsa-sha512`,
+		},
+		{
+			name:       "unknown flag",
+			args:       []string{"-unknown"},
+			wantErr:    "flag provided but not defined",
+			wantStderr: "Usage of aws-kms-sign-csr",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+
+			got, err := parseConfig(tt.args, &stderr)
+			if tt.wantErr != "" {
+				requireErrorContains(t, err, tt.wantErr)
+				if tt.wantStderr != "" && !strings.Contains(stderr.String(), tt.wantStderr) {
+					t.Fatalf("stderr = %q, want substring %q", stderr.String(), tt.wantStderr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseConfig returned error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("config = %#v, want %#v", got, tt.want)
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunReturnsConfigError(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := run(context.Background(), nil, &stdout, &stderr)
+	requireErrorContains(t, err, "--csr is required")
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage of aws-kms-sign-csr") {
+		t.Fatalf("stderr = %q, want usage output", stderr.String())
+	}
 }
 
 func TestReadCSRDER(t *testing.T) {
@@ -128,6 +235,35 @@ func TestReadCSRDER(t *testing.T) {
 	}
 }
 
+func TestWriteCSRPEM(t *testing.T) {
+	der := makeCSR(t, testCSRTemplate(t))
+	var out bytes.Buffer
+
+	if err := writeCSRPEM(&out, der); err != nil {
+		t.Fatalf("writeCSRPEM returned error: %v", err)
+	}
+
+	block, rest := pem.Decode(out.Bytes())
+	if block == nil {
+		t.Fatalf("output did not contain a PEM block")
+	}
+	if len(rest) != 0 {
+		t.Fatalf("unexpected trailing PEM data: %q", rest)
+	}
+	if block.Type != "CERTIFICATE REQUEST" {
+		t.Fatalf("PEM type = %q, want CERTIFICATE REQUEST", block.Type)
+	}
+	if !bytes.Equal(block.Bytes, der) {
+		t.Fatalf("PEM DER mismatch")
+	}
+
+	wantErr := errors.New("write failed")
+	err := writeCSRPEM(errorWriter{err: wantErr}, der)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("writeCSRPEM error = %v, want %v", err, wantErr)
+	}
+}
+
 func TestFetchKMSPublicKeyDER(t *testing.T) {
 	wantDER := []byte{1, 2, 3}
 	client := &fakeKMSClient{publicKeyDER: wantDER}
@@ -149,6 +285,126 @@ func TestFetchKMSPublicKeyDER(t *testing.T) {
 	client = &fakeKMSClient{getErr: errors.New("kms unavailable")}
 	_, err = fetchKMSPublicKeyDER(context.Background(), client, "alias/test")
 	requireErrorContains(t, err, "GetPublicKey")
+}
+
+func TestSignCSR(t *testing.T) {
+	csrDER := makeCSR(t, testCSRTemplate(t))
+	csrFile := writeTempFile(t, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}))
+	kmsKey := mustECDSAKey(t)
+	client := &fakeKMSClient{
+		publicKeyDER: mustMarshalPKIXPublicKey(t, &kmsKey.PublicKey),
+		signFunc: func(digest []byte, algorithm kmstypes.SigningAlgorithmSpec) ([]byte, error) {
+			if algorithm != kmstypes.SigningAlgorithmSpecEcdsaSha256 {
+				t.Fatalf("signing algorithm = %s, want %s", algorithm, kmstypes.SigningAlgorithmSpecEcdsaSha256)
+			}
+			return ecdsa.SignASN1(rand.Reader, kmsKey, digest)
+		},
+	}
+	var out bytes.Buffer
+
+	err := signCSR(context.Background(), config{
+		csrFile:   csrFile,
+		keyID:     "alias/test",
+		algorithm: "ecdsa-sha256",
+	}, client, &out)
+	if err != nil {
+		t.Fatalf("signCSR returned error: %v", err)
+	}
+
+	block, rest := pem.Decode(out.Bytes())
+	if block == nil {
+		t.Fatalf("output did not contain a PEM block")
+	}
+	if len(rest) != 0 {
+		t.Fatalf("unexpected trailing PEM data: %q", rest)
+	}
+
+	parsed := parseCSR(t, block.Bytes)
+	if err := parsed.CheckSignature(); err != nil {
+		t.Fatalf("signed CSR signature did not verify: %v", err)
+	}
+	assertECDSAPublicKeyEqual(t, &kmsKey.PublicKey, parsed.PublicKey)
+	assertTemplatePreserved(t, parsed)
+	if client.getCalls != 1 {
+		t.Fatalf("GetPublicKey calls = %d, want 1", client.getCalls)
+	}
+	if client.signCalls != 1 {
+		t.Fatalf("Sign calls = %d, want 1", client.signCalls)
+	}
+}
+
+func TestSignCSRErrors(t *testing.T) {
+	csrDER := makeCSR(t, testCSRTemplate(t))
+	csrFile := writeTempFile(t, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}))
+	kmsKey := mustECDSAKey(t)
+	kmsPubDER := mustMarshalPKIXPublicKey(t, &kmsKey.PublicKey)
+
+	tests := []struct {
+		name    string
+		cfg     config
+		client  *fakeKMSClient
+		stdout  errorWriter
+		wantErr string
+	}{
+		{
+			name: "read CSR",
+			cfg: config{
+				csrFile:   "missing.csr",
+				keyID:     "alias/test",
+				algorithm: "ecdsa-sha256",
+			},
+			client:  &fakeKMSClient{publicKeyDER: kmsPubDER},
+			wantErr: "reading CSR",
+		},
+		{
+			name: "fetch KMS public key",
+			cfg: config{
+				csrFile:   csrFile,
+				keyID:     "alias/test",
+				algorithm: "ecdsa-sha256",
+			},
+			client:  &fakeKMSClient{getErr: errors.New("fetch failed")},
+			wantErr: "fetching KMS public key",
+		},
+		{
+			name: "build signed CSR",
+			cfg: config{
+				csrFile:   csrFile,
+				keyID:     "alias/test",
+				algorithm: "ecdsa-sha256",
+			},
+			client:  &fakeKMSClient{publicKeyDER: []byte("invalid")},
+			wantErr: "building signed CSR",
+		},
+		{
+			name: "write PEM",
+			cfg: config{
+				csrFile:   csrFile,
+				keyID:     "alias/test",
+				algorithm: "ecdsa-sha256",
+			},
+			client: &fakeKMSClient{
+				publicKeyDER: kmsPubDER,
+				signFunc: func(digest []byte, _ kmstypes.SigningAlgorithmSpec) ([]byte, error) {
+					return ecdsa.SignASN1(rand.Reader, kmsKey, digest)
+				},
+			},
+			stdout:  errorWriter{err: errors.New("write failed")},
+			wantErr: "writing PEM output",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout io.Writer = &bytes.Buffer{}
+			if tt.stdout.err != nil {
+				stdout = tt.stdout
+			}
+
+			err := signCSR(context.Background(), tt.cfg, tt.client, stdout)
+			requireErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 func TestBuildSignedCSRECDSA(t *testing.T) {
@@ -415,6 +671,19 @@ func TestAlgorithmTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSupportedAlgorithmNames(t *testing.T) {
+	want := []string{
+		"ecdsa-sha256",
+		"ecdsa-sha384",
+		"ecdsa-sha512",
+		"rsa-sha256",
+		"rsa-sha384",
+		"rsa-sha512",
+	}
+	got := supportedAlgorithmNames()
+	assertStringSlicesEqual(t, got, want, "supportedAlgorithmNames")
 }
 
 func makeCSR(t *testing.T, template *x509.CertificateRequest) []byte {
