@@ -33,11 +33,11 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 
 	if *csrFile == "" {
 		flags.Usage()
-		return config{}, fmt.Errorf("--csr is required")
+		return config{}, fmt.Errorf("-csr is required")
 	}
 	if *keyID == "" {
 		flags.Usage()
-		return config{}, fmt.Errorf("--key-id is required")
+		return config{}, fmt.Errorf("-key-id is required")
 	}
 	if _, ok := algorithms[*algorithm]; !ok {
 		return config{}, fmt.Errorf("unknown algorithm %q; valid choices: %s", *algorithm, strings.Join(supportedAlgorithmNames(), ", "))
