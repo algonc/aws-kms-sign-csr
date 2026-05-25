@@ -79,13 +79,14 @@ csr: $(BIN)
 	  echo "==> Extracting public key from signed CSR"; \
 	  openssl req -in "$(TMP_SIGNED)" -noout -pubkey -out "$(TMP_CSR_PUB)"; \
 	  echo ""; \
-	  echo "==> SHA-256 checksums (must match)"; \
-	  sha256sum "$(TMP_KMS_PUB)" "$(TMP_CSR_PUB)"; \
-	  echo ""; \
 	  echo "==> KMS public key details"; \
 	  openssl pkey -pubin -in "$(TMP_KMS_PUB)" -text -noout; \
 	  echo "==> CSR public key details"; \
 	  openssl pkey -pubin -in "$(TMP_CSR_PUB)" -text -noout; \
+	  echo ""; \
+	  echo "==> Comparing public keys"; \
+	  diff -u "$(TMP_KMS_PUB)" "$(TMP_CSR_PUB)" || { echo "error: public keys do not match"; exit 1; }; \
+	  echo "Public keys match"; \
 	fi
 
 clean:
