@@ -122,13 +122,13 @@ func TestParseConfig(t *testing.T) {
 		{
 			name:       "missing CSR",
 			args:       []string{"-key-id", "alias/test"},
-			wantErr:    "--csr is required",
+			wantErr:    "-csr is required",
 			wantStderr: "Usage of aws-kms-sign-csr",
 		},
 		{
 			name:       "missing key ID",
 			args:       []string{"-csr", "input.csr"},
-			wantErr:    "--key-id is required",
+			wantErr:    "-key-id is required",
 			wantStderr: "Usage of aws-kms-sign-csr",
 		},
 		{
@@ -174,7 +174,7 @@ func TestRunReturnsConfigError(t *testing.T) {
 	var stderr bytes.Buffer
 
 	err := run(context.Background(), nil, &stdout, &stderr)
-	requireErrorContains(t, err, "--csr is required")
+	requireErrorContains(t, err, "-csr is required")
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty", stdout.String())
 	}
