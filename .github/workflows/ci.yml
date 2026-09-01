@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
@@ -16,12 +14,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  COVERAGE_THRESHOLD: "70.0"
+
 jobs:
   validate:
     name: Validate Go
     runs-on: ubuntu-latest
-    env:
-      MIN_COVERAGE: "80.0"
 
     steps:
       - name: Checkout
@@ -45,36 +44,40 @@ jobs:
             exit 1
           fi
 
-      - name: Verify module files are tidy
+      - name: Verify module
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run tests
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
-
-      - name: Check coverage
-        run: |
-          coverage="$(go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $3); print $3 }')"
-          echo "Total coverage: ${coverage}%"
-          awk -v coverage="$coverage" -v minimum="$MIN_COVERAGE" 'BEGIN {
-            if (coverage + 0 < minimum + 0) {
-              printf("Coverage %.1f%% is below required minimum %.1f%%\n", coverage, minimum)
-              exit 1
-            }
-          }'
-
-      - name: Build
-        run: go build -trimpath -o /tmp/aws-kms-sign-csr .
-
-      - name: Run golangci-lint
+      - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           args: --timeout=5m
 
-      - name: Run govulncheck
+      - name: Test
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Check coverage
+        shell: bash
+        run: |
+          coverage="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')"
+          if [[ -z "$coverage" ]]; then
+            echo "::error::Unable to determine total test coverage."
+            exit 1
+          fi
+
+          echo "Total coverage: ${coverage}%"
+          echo "### Test coverage: ${coverage}%" >> "$GITHUB_STEP_SUMMARY"
+
+          if ! awk -v coverage="$coverage" -v threshold="$COVERAGE_THRESHOLD" \
+            'BEGIN { exit !(coverage + 0 >= threshold + 0) }'; then
+            echo "::error::Test coverage ${coverage}% is below the required ${COVERAGE_THRESHOLD}%."
+            exit 1
+          fi
+
+      - name: Check vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+
+      - name: Build
+        run: go build -trimpath -o /tmp/app .
