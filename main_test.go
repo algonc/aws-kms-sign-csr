@@ -856,7 +856,7 @@ func assertECDSAPublicKeyEqual(t *testing.T, want *ecdsa.PublicKey, got any) {
 	if !ok {
 		t.Fatalf("public key type = %T, want *ecdsa.PublicKey", got)
 	}
-	if gotKey.Curve != want.Curve || gotKey.X.Cmp(want.X) != 0 || gotKey.Y.Cmp(want.Y) != 0 {
+	if !gotKey.Equal(want) {
 		t.Fatalf("ECDSA public key mismatch")
 	}
 }
