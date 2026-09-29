@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.26.0 or later
 - AWS credentials configured for the target account
 - An AWS KMS asymmetric key with `kms:GetPublicKey` and `kms:Sign` permissions
 
