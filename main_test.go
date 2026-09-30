@@ -1,3 +1,5 @@
+// Copyright 2026 Andre Goncalves. All rights reserved.
+
 package main
 
 import (
