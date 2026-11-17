@@ -1,4 +1,5 @@
 BIN        := bin/aws-kms-sign-csr
+CMD_DIR    := cmd/aws-kms-sign-csr
 
 KEY_ID           ?=
 ALGORITHM        ?= ecdsa-sha256
@@ -19,9 +20,9 @@ all: build
 
 build: $(BIN)
 
-$(BIN): main.go go.mod
+$(BIN): $(wildcard $(CMD_DIR)/*.go) go.mod go.sum Makefile
 	@mkdir -p bin
-	go build -o $(BIN) .
+	go build -o $(BIN) ./$(CMD_DIR)
 
 csr: $(BIN)
 	@# Validate required variables

@@ -4,7 +4,7 @@
 
 This repository contains `aws-kms-sign-csr`, a Go CLI that rewrites a PEM CSR to use an AWS KMS asymmetric public key and asks KMS to sign the updated `CertificationRequestInfo`. The private key must never leave KMS.
 
-The code is currently a small single-package Go module:
+The Go module defines a single command package in `cmd/aws-kms-sign-csr`:
 
 - `main.go` contains the entrypoint and top-level orchestration.
 - `cli.go` contains flag parsing and CLI config validation.
@@ -23,7 +23,7 @@ Use these commands from the repository root:
 ```sh
 go fmt ./...
 go test ./...
-go build -o bin/aws-kms-sign-csr .
+go build -o bin/aws-kms-sign-csr ./cmd/aws-kms-sign-csr
 ```
 
 The Makefile equivalent for building is:
