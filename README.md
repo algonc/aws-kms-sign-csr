@@ -11,7 +11,7 @@
 ## Build
 
 ```sh
-go build -o aws-kms-sign-csr .
+go build -o aws-kms-sign-csr ./cmd/aws-kms-sign-csr
 ```
 
 Or build into `bin/` with:
