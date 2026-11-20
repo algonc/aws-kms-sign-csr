@@ -1,5 +1,9 @@
-BIN        := bin/aws-kms-sign-csr
-CMD_DIR    := cmd/aws-kms-sign-csr
+GO ?= go
+GOLANGCI_LINT ?= golangci-lint
+BIN_DIR ?= bin
+
+CMD_NAME := aws-kms-sign-csr
+BIN = $(BIN_DIR)/$(CMD_NAME)$(shell $(GO) env GOEXE)
 
 KEY_ID           ?=
 ALGORITHM        ?= ecdsa-sha256
@@ -14,17 +18,39 @@ TMP_SIGNED  = $(TMP_DIR)/signed.csr
 TMP_KMS_PUB = $(TMP_DIR)/kms_pub.pem
 TMP_CSR_PUB = $(TMP_DIR)/csr_pub.pem
 
-.PHONY: all build csr clean
+.DEFAULT_GOAL := all
 
-all: build
+.PHONY: all build test test-cover vet lint fmt tidy verify check csr clean
 
-build: $(BIN)
+all: check build
 
-$(BIN): $(wildcard $(CMD_DIR)/*.go) go.mod go.sum Makefile
-	@mkdir -p bin
-	go build -o $(BIN) ./$(CMD_DIR)
+build:
+	$(GO) build -trimpath -o "$(BIN_DIR)/" ./cmd/$(CMD_NAME)
 
-csr: $(BIN)
+test:
+	$(GO) test -count=1 ./...
+
+test-cover:
+	$(GO) test -count=1 -cover ./...
+
+vet:
+	$(GO) vet ./...
+
+lint:
+	$(GOLANGCI_LINT) run
+
+fmt:
+	$(GO) fmt ./...
+
+tidy:
+	$(GO) mod tidy
+
+verify:
+	$(GO) mod verify
+
+check: verify vet lint test
+
+csr: build
 	@# Validate required variables
 	@test -n "$(KEY_ID)"    || { echo "error: KEY_ID is not set"; exit 1; }
 	@test -n "$(REGION)"    || { echo "error: REGION is not set"; exit 1; }
@@ -48,7 +74,7 @@ csr: $(BIN)
 
 	@# Sign the CSR with the KMS key
 	@echo "==> Signing CSR with KMS key $(KEY_ID)"
-	$(BIN) \
+	"$(BIN)" \
 	  -csr "$(TMP_CSR)" \
 	  -key-id "$(KEY_ID)" \
 	  -algorithm "$(ALGORITHM)" \
@@ -91,6 +117,7 @@ csr: $(BIN)
 	fi
 
 clean:
-	rm -f $(BIN)
-	@rmdir bin 2>/dev/null || true
+	$(GO) clean ./...
+	$(RM) "$(BIN)"
+	@rmdir "$(BIN_DIR)" 2>/dev/null || true
 	@if [ -n "$(OUTPUT_DIR)" ]; then rm -rf "$(TMP_DIR)"; fi

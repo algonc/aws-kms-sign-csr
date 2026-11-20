@@ -1,22 +1,36 @@
 # Makefile Workflow
 
-The `Makefile` automates building the CLI, creating a CSR from an OpenSSL config file, signing it with KMS, and validating the result.
+The `Makefile` provides build and validation targets and automates generating and signing a CSR with KMS.
 
 ## Requirements
 
-- `openssl` for CSR generation, inspection, and verification.
-- AWS credentials with `kms:GetPublicKey` and `kms:Sign` for the selected key.
-- AWS CLI when `CHECK_PUBLIC_KEY=true`.
+- GNU Make and Go 1.26.0 or later.
+- `golangci-lint` for `make`, `make check`, and `make lint`.
+- `openssl` and AWS credentials with `kms:GetPublicKey` and `kms:Sign` for `make csr`.
+- AWS CLI for `make csr CHECK_PUBLIC_KEY=true`.
 
 ## Targets
 
 | Target | Description |
 |---|---|
-| `build` | Compiles the binary to `bin/aws-kms-sign-csr`. |
+| `all` (default) | Runs `check` and builds the CLI. |
+| `build` | Compiles the CLI with `-trimpath` into `BIN_DIR`, which defaults to `bin/`. |
+| `check` | Runs `verify`, `vet`, `lint`, and `test`. |
+| `verify` | Verifies downloaded Go modules. |
+| `vet` | Runs `go vet` on all packages. |
+| `lint` | Runs `golangci-lint` with the repository configuration. |
+| `test` | Runs all Go tests with the test cache disabled. |
+| `test-cover` | Runs all Go tests with coverage and the test cache disabled. |
+| `fmt` | Formats Go source files. |
+| `tidy` | Updates `go.mod` and `go.sum` to match the source imports. |
 | `csr` | Generates a CSR, signs it with KMS, writes `signed.csr`, and prints a verification report. |
-| `clean` | Removes the compiled binary and `OUTPUT_DIR/.tmp` when `OUTPUT_DIR` is set. |
+| `clean` | Runs `go clean`, removes the CLI binary, and removes `OUTPUT_DIR/.tmp` when `OUTPUT_DIR` is set. |
 
 ## Variables
+
+Override `GO`, `GOLANGCI_LINT`, or `BIN_DIR` to select the Go command, linter command, or binary directory. The defaults are `go`, `golangci-lint`, and `bin`.
+
+The `csr` target accepts the following variables.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
