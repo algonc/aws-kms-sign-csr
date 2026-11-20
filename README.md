@@ -38,6 +38,7 @@ The input CSR provides the subject and requested extensions. The signed CSR is w
 - [Usage guide](docs/usage.md): flags, supported algorithms, examples, validation, and limitations.
 - [Makefile workflow](docs/makefile.md): automated CSR generation, signing, verification, and required variables.
 - [Implementation notes](docs/implementation.md): CSR rewriting, KMS signing behavior, and ASN.1 details.
+- Maintainer instructions for preparing, publishing, and verifying releases are in the [release guide](docs/releasing.md).
 
 ## License
 
