@@ -4,9 +4,19 @@
 
 ## Requirements
 
-- Go 1.26.0 or later
+- Go 1.26.0 or later for building from source
 - AWS credentials configured for the target account
 - An AWS KMS asymmetric key with `kms:GetPublicKey` and `kms:Sign` permissions
+
+## Install
+
+On Linux or macOS (amd64 or arm64), install the latest stable release into `~/.local/bin`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/algonc/aws-kms-sign-csr/main/install.sh | sh
+```
+
+The installer verifies the archive against the release's SHA-256 checksum before replacing the executable. To select a release or installation directory, pass `--version TAG` or `--bin-dir DIR` to the script.
 
 ## Build
 
